@@ -425,6 +425,31 @@ app.get('/api/debug', async (req, res) => {
   res.json(results);
 });
 
+app.get('/api/debug-summoner/:name/:tag', async (req, res) => {
+  const { name, tag } = req.params;
+  const steps = {};
+  try {
+    // Étape 1 : Account
+    const r1 = await fetch(`${RIOT_ROUTING_BASE}/riot/account/v1/accounts/by-riot-id/${encodeURIComponent(name)}/${encodeURIComponent(tag)}`, { headers: { 'X-Riot-Token': RIOT_KEY } });
+    steps.step1_account = { status: r1.status, body: JSON.parse(await r1.text()) };
+    if (!r1.ok) return res.json(steps);
+
+    // Étape 2 : Summoner
+    const puuid = steps.step1_account.body.puuid;
+    const r2 = await fetch(`${RIOT_BASE}/lol/summoner/v4/summoners/by-puuid/${puuid}`, { headers: { 'X-Riot-Token': RIOT_KEY } });
+    steps.step2_summoner = { status: r2.status, body: JSON.parse(await r2.text()) };
+    if (!r2.ok) return res.json(steps);
+
+    // Étape 3 : Ranked
+    const summonerId = steps.step2_summoner.body.id;
+    const r3 = await fetch(`${RIOT_BASE}/lol/league/v4/entries/by-summoner/${summonerId}`, { headers: { 'X-Riot-Token': RIOT_KEY } });
+    steps.step3_ranked = { status: r3.status, body: JSON.parse(await r3.text()) };
+  } catch (e) {
+    steps.error = e.message;
+  }
+  res.json(steps);
+});
+
 app.get('/api/health', async (req, res) => {
   const hasKey = !!RIOT_KEY && RIOT_KEY !== 'RGAPI-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx';
   let riotOk = false;
