@@ -403,6 +403,28 @@ app.get('/api/champions', async (req, res) => {
 // HEALTH CHECK
 // ══════════════════════════════════════════════════
 
+app.get('/api/debug', async (req, res) => {
+  const results = {
+    keyLength: RIOT_KEY ? RIOT_KEY.length : 0,
+    keyPrefix: RIOT_KEY ? RIOT_KEY.substring(0, 15) : 'MISSING',
+    keyHasDoubleRGAPI: RIOT_KEY ? RIOT_KEY.includes('RGAPI-RGAPI') : false,
+    keyHasSpaces: RIOT_KEY ? RIOT_KEY !== RIOT_KEY.trim() : false,
+    platformUrl: RIOT_BASE,
+    routingUrl: RIOT_ROUTING_BASE,
+    tests: {}
+  };
+  try {
+    const r1 = await fetch(`${RIOT_BASE}/lol/status/v4/platform-data`, { headers: { 'X-Riot-Token': RIOT_KEY } });
+    results.tests.platform = { status: r1.status, ok: r1.ok };
+  } catch (e) { results.tests.platform = { error: e.message }; }
+  try {
+    const r2 = await fetch(`${RIOT_ROUTING_BASE}/riot/account/v1/accounts/by-riot-id/Faker/KR1`, { headers: { 'X-Riot-Token': RIOT_KEY } });
+    const body = await r2.text();
+    results.tests.routing = { status: r2.status, body: body.substring(0, 200) };
+  } catch (e) { results.tests.routing = { error: e.message }; }
+  res.json(results);
+});
+
 app.get('/api/health', async (req, res) => {
   const hasKey = !!RIOT_KEY && RIOT_KEY !== 'RGAPI-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx';
   let riotOk = false;
