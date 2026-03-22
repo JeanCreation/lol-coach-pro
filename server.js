@@ -119,23 +119,34 @@ app.get('/api/summoner/:gameName/:tagLine', async (req, res) => {
   try {
     const { gameName, tagLine } = req.params;
     
-    // Étape 1: Riot ID → PUUID (via routing regional)
+    // Étape 1: Riot ID → PUUID
     const account = await riotFetch(
       `${RIOT_ROUTING_BASE}/riot/account/v1/accounts/by-riot-id/${encodeURIComponent(gameName)}/${encodeURIComponent(tagLine)}`
     );
     
-    // Étape 2: PUUID → Summoner data (niveau, icône)
+    // Étape 2: PUUID → Summoner data
     const summoner = await riotFetch(
       `${RIOT_BASE}/lol/summoner/v4/summoners/by-puuid/${account.puuid}`
     );
     
-    // Étape 3: Ranked stats
-    const ranked = await riotFetch(
-      `${RIOT_BASE}/lol/league/v4/entries/by-summoner/${summoner.id}`
-    );
+    // Étape 3: Ranked stats (avec fallback si id manquant)
+    let soloQ = null;
+    let flex = null;
     
-    const soloQ = ranked.find(r => r.queueType === 'RANKED_SOLO_5x5');
-    const flex = ranked.find(r => r.queueType === 'RANKED_FLEX_SR');
+    const summonerId = summoner.id;
+    if (summonerId) {
+      try {
+        const ranked = await riotFetch(
+          `${RIOT_BASE}/lol/league/v4/entries/by-summoner/${summonerId}`
+        );
+        const sq = ranked.find(r => r.queueType === 'RANKED_SOLO_5x5');
+        const fl = ranked.find(r => r.queueType === 'RANKED_FLEX_SR');
+        if (sq) soloQ = { tier: sq.tier, rank: sq.rank, lp: sq.leaguePoints, wins: sq.wins, losses: sq.losses, winRate: ((sq.wins / (sq.wins + sq.losses)) * 100).toFixed(1) };
+        if (fl) flex = { tier: fl.tier, rank: fl.rank, lp: fl.leaguePoints, wins: fl.wins, losses: fl.losses };
+      } catch (e) {
+        console.log('⚠️ Ranked stats non disponibles:', e.message);
+      }
+    }
     
     const dd = await getDataDragon();
     
@@ -145,21 +156,8 @@ app.get('/api/summoner/:gameName/:tagLine', async (req, res) => {
       tagLine: account.tagLine,
       summonerLevel: summoner.summonerLevel,
       profileIcon: `https://ddragon.leagueoflegends.com/cdn/${dd.version}/img/profileicon/${summoner.profileIconId}.png`,
-      soloQ: soloQ ? {
-        tier: soloQ.tier,
-        rank: soloQ.rank,
-        lp: soloQ.leaguePoints,
-        wins: soloQ.wins,
-        losses: soloQ.losses,
-        winRate: ((soloQ.wins / (soloQ.wins + soloQ.losses)) * 100).toFixed(1),
-      } : null,
-      flex: flex ? {
-        tier: flex.tier,
-        rank: flex.rank,
-        lp: flex.leaguePoints,
-        wins: flex.wins,
-        losses: flex.losses,
-      } : null,
+      soloQ,
+      flex,
     });
   } catch (err) {
     handleError(res, err);
